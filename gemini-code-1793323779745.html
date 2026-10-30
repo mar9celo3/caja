@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Control de Ventas y Gastos Diarios</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+    .custom-scroll::-webkit-scrollbar { width: 6px; }
+    .custom-scroll::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 8px; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
+    .custom-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+  </style>
+</head>
+<body class="min-h-screen pb-36 text-slate-800">
+
+  <!-- Encabezado -->
+  <header class="bg-emerald-700 text-white shadow-md sticky top-0 z-20">
+    <div class="max-w-6xl mx-auto px-4 py-4 flex flex-wrap justify-between items-center gap-4">
+      <div class="flex items-center gap-3">
+        <div class="bg-emerald-600 p-2.5 rounded-xl shadow-inner">
+          <i class="fa-solid fa-cash-register text-2xl text-emerald-100"></i>
+        </div>
+        <div>
+          <h1 class="text-xl font-bold tracking-tight">Mi Caja Diaria</h1>
+          <p class="text-xs text-emerald-100">Control rápido de ventas y gastos</p>
+        </div>
+      </div>
+
+      <!-- Controles de Fecha y Exportación -->
+      <div class="flex flex-wrap items-center gap-2">
+        <div class="flex items-center bg-emerald-800/80 rounded-lg p-1 border border-emerald-600">
+          <button onclick="setFilterMode('all')" id="btnFilterAll" class="px-3 py-1.5 rounded-md text-xs font-medium transition">
+            Todos los días
+          </button>
+          <button onclick="setFilterMode('date')" id="btnFilterDate" class="px-3 py-1.5 rounded-md text-xs font-medium transition">
+            Por día
+          </button>
+        </div>
+
+        <input type="date" id="filterDateInput" onchange="renderApp()" 
+          class="bg-white text-slate-800 text-sm rounded-lg px-3 py-1.5 font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-300">
+
+        <button onclick="exportCSV()" title="Descargar para Excel" 
+          class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-1.5 shadow-sm border border-emerald-500">
+          <i class="fa-solid fa-file-csv"></i> <span class="hidden sm:inline">Exportar Excel</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-4 mt-6">
+    
+    <!-- Banner de Modo Edición (Oculto por defecto) -->
+    <div id="editBanner" class="hidden mb-4 bg-amber-50 border border-amber-300 text-amber-900 px-4 py-3 rounded-xl flex justify-between items-center shadow-sm">
+      <div class="flex items-center gap-2 text-sm font-medium">
+        <i class="fa-solid fa-pen-to-square text-amber-600"></i>
+        <span id="editBannerText">Editando registro...</span>
+      </div>
+      <button onclick="cancelEdit()" class="text-xs bg-amber-200 hover:bg-amber-300 text-amber-900 px-3 py-1 rounded-lg font-semibold transition">
+        Cancelar edición
+      </button>
+    </div>
+
+    <!-- Selector de Fecha de Ingreso Activo -->
+    <div class="bg-white rounded-xl p-4 shadow-sm border border-slate-200 mb-6 flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <label for="entryDate" class="text-sm font-semibold text-slate-700 flex items-center gap-2">
+          <i class="fa-regular fa-calendar-check text-emerald-600 text-lg"></i>
+          Fecha del movimiento a registrar:
+        </label>
+        <input type="date" id="entryDate" 
+          class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+      </div>
+      <div class="flex items-center gap-2 text-xs text-slate-500">
+        <span><i class="fa-solid fa-floppy-disk text-emerald-600"></i> Guardado automático activado</span>
+        <span>•</span>
+        <button onclick="clearAllData()" class="text-rose-600 hover:underline font-medium">Limpiar todo</button>
+      </div>
+    </div>
+
+    <!-- Dos Columnas: Ventas (Izquierda) y Gastos (Derecha) -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+      <!-- COLUMNA 1: VENTAS / GANANCIAS -->
+      <section class="bg-white rounded-2xl shadow-sm border border-emerald-200 overflow-hidden flex flex-col">
+        <div class="bg-emerald-50 border-b border-emerald-100 px-5 py-3.5 flex justify-between items-center">
+          <div class="flex items-center gap-2">
+            <span class="w-3 h-3 rounded-full bg-emerald-500"></span>
+            <h2 class="font-bold text-emerald-950 text-lg">Ventas / Ingresos</h2>
+          </div>
+          <span id="salesCountBadge" class="text-xs font-semibold bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-full">0 registros</span>
+        </div>
+
+        <!-- Formulario de Venta -->
+        <form id="saleForm" onsubmit="handleSave(event, 'sale')" class="p-5 border-b border-slate-100 bg-slate-50/50">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Monto de Venta ($) *</label>
+              <div class="relative">
+                <span class="absolute left-3 top-2 text-slate-400 font-semibold">$</span>
+                <input type="number" id="saleAmount" required min="1" step="any" placeholder="Ej: 45000"
+                  class="w-full pl-7 pr-3 py-2 rounded-lg border border-slate-300 text-sm font-semibold focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+              </div>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Comentario (Opcional)</label>
+              <input type="text" id="saleComment" placeholder="Ej: Venta mañana, Efectivo..."
+                class="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+            </div>
+          </div>
+
+          <!-- Etiquetas rápidas Ventas -->
+          <div class="flex flex-wrap items-center gap-1.5 mb-3">
+            <span class="text-[11px] text-slate-400 mr-1">Rápido:</span>
+            <button type="button" onclick="setQuickComment('saleComment', 'Efectivo')" class="text-xs bg-white border border-slate-200 hover:bg-emerald-50 hover:border-emerald-300 text-slate-600 px-2 py-0.5 rounded-md transition">💵 Efectivo</button>
+            <button type="button" onclick="setQuickComment('saleComment', 'Transferencia')" class="text-xs bg-white border border-slate-200 hover:bg-emerald-50 hover:border-emerald-300 text-slate-600 px-2 py-0.5 rounded-md transition">📲 Transferencia</button>
+            <button type="button" onclick="setQuickComment('saleComment', 'Tarjeta / Redcompra')" class="text-xs bg-white border border-slate-200 hover:bg-emerald-50 hover:border-emerald-300 text-slate-600 px-2 py-0.5 rounded-md transition">💳 Tarjeta</button>
+            <button type="button" onclick="setQuickComment('saleComment', 'Cierre de caja del día')" class="text-xs bg-white border border-slate-200 hover:bg-emerald-50 hover:border-emerald-300 text-slate-600 px-2 py-0.5 rounded-md transition">📦 Cierre del día</button>
+          </div>
+
+          <button type="submit" id="saleSubmitBtn"
+            class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded-xl text-sm shadow-sm transition flex items-center justify-center gap-2">
+            <i class="fa-solid fa-plus"></i> Agregar Venta
+          </button>
+        </form>
+
+        <!-- Lista de Ventas -->
+        <div id="salesList" class="p-4 space-y-2.5 max-h-96 overflow-y-auto custom-scroll flex-1">
+          <!-- Dinámico -->
+        </div>
+
+        <!-- Subtotal Columna Ventas -->
+        <div class="bg-emerald-50/70 border-t border-emerald-100 px-5 py-3 flex justify-between items-center">
+          <span class="text-xs font-semibold text-emerald-800 uppercase tracking-wider">Subtotal Ventas</span>
+          <span id="subtotalSales" class="text-lg font-bold text-emerald-700">$0</span>
+        </div>
+      </section>
+
+      <!-- COLUMNA 2: GASTOS -->
+      <section class="bg-white rounded-2xl shadow-sm border border-rose-200 overflow-hidden flex flex-col">
+        <div class="bg-rose-50 border-b border-rose-100 px-5 py-3.5 flex justify-between items-center">
+          <div class="flex items-center gap-2">
+            <span class="w-3 h-3 rounded-full bg-rose-500"></span>
+            <h2 class="font-bold text-rose-950 text-lg">Gastos / Compras</h2>
+          </div>
+          <span id="expensesCountBadge" class="text-xs font-semibold bg-rose-100 text-rose-800 px-2.5 py-1 rounded-full">0 registros</span>
+        </div>
+
+        <!-- Formulario de Gasto -->
+        <form id="expenseForm" onsubmit="handleSave(event, 'expense')" class="p-5 border-b border-slate-100 bg-slate-50/50">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Monto del Gasto ($) *</label>
+              <div class="relative">
+                <span class="absolute left-3 top-2 text-slate-400 font-semibold">$</span>
+                <input type="number" id="expenseAmount" required min="1" step="any" placeholder="Ej: 15000"
+                  class="w-full pl-7 pr-3 py-2 rounded-lg border border-slate-300 text-sm font-semibold focus:ring-2 focus:ring-rose-500 focus:outline-none">
+              </div>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Comentario (Opcional)</label>
+              <input type="text" id="expenseComment" placeholder="Ej: Compra mercadería, bolsas..."
+                class="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-rose-500 focus:outline-none">
+            </div>
+          </div>
+
+          <!-- Etiquetas rápidas Gastos -->
+          <div class="flex flex-wrap items-center gap-1.5 mb-3">
+            <span class="text-[11px] text-slate-400 mr-1">Rápido:</span>
+            <button type="button" onclick="setQuickComment('expenseComment', 'Mercadería / Reposición')" class="text-xs bg-white border border-slate-200 hover:bg-rose-50 hover:border-rose-300 text-slate-600 px-2 py-0.5 rounded-md transition">🥬 Mercadería</button>
+            <button type="button" onclick="setQuickComment('expenseComment', 'Bolsas e Insumos')" class="text-xs bg-white border border-slate-200 hover:bg-rose-50 hover:border-rose-300 text-slate-600 px-2 py-0.5 rounded-md transition">🛍️ Bolsas/Insumos</button>
+            <button type="button" onclick="setQuickComment('expenseComment', 'Transporte / Combustible')" class="text-xs bg-white border border-slate-200 hover:bg-rose-50 hover:border-rose-300 text-slate-600 px-2 py-0.5 rounded-md transition">🚚 Transporte</button>
+            <button type="button" onclick="setQuickComment('expenseComment', 'Colación / Almuerzo')" class="text-xs bg-white border border-slate-200 hover:bg-rose-50 hover:border-rose-300 text-slate-600 px-2 py-0.5 rounded-md transition">🥪 Colación</button>
+          </div>
+
+          <button type="submit" id="expenseSubmitBtn"
+            class="w-full bg-rose-600 hover:bg-rose-700 text-white font-semibold py-2.5 rounded-xl text-sm shadow-sm transition flex items-center justify-center gap-2">
+            <i class="fa-solid fa-minus"></i> Agregar Gasto
+          </button>
+        </form>
+
+        <!-- Lista de Gastos -->
+        <div id="expensesList" class="p-4 space-y-2.5 max-h-96 overflow-y-auto custom-scroll flex-1">
+          <!-- Dinámico -->
+        </div>
+
+        <!-- Subtotal Columna Gastos -->
+        <div class="bg-rose-50/70 border-t border-rose-100 px-5 py-3 flex justify-between items-center">
+          <span class="text-xs font-semibold text-rose-800 uppercase tracking-wider">Subtotal Gastos</span>
+          <span id="subtotalExpenses" class="text-lg font-bold text-rose-700">$0</span>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- Resumen por Día (Tabla de Histórico Diario) -->
+    <section class="mt-8 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+      <div class="px-5 py-4 border-b border-slate-100 flex justify-between items-center">
+        <h3 class="font-bold text-slate-800 text-base flex items-center gap-2">
+          <i class="fa-solid fa-table-list text-slate-500"></i>
+          Resumen Consolidado por Día
+        </h3>
+        <span class="text-xs text-slate-400">Haz clic en una fecha para filtrarla</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse text-sm">
+          <thead>
+            <tr class="bg-slate-50 text-slate-500 text-xs uppercase border-b border-slate-200">
+              <th class="py-3 px-4 font-semibold">Fecha</th>
+              <th class="py-3 px-4 font-semibold text-right">Ventas</th>
+              <th class="py-3 px-4 font-semibold text-right">Gastos</th>
+              <th class="py-3 px-4 font-semibold text-right">Ganancia Neta</th>
+            </tr>
+          </thead>
+          <tbody id="dailySummaryBody" class="divide-y divide-slate-100">
+            <!-- Dinámico -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- BARRA FINAL FIJA: TOTAL (GANANCIA MENOS GASTOS) -->
+  <footer class="fixed bottom-0 left-0 right-0 bg-slate-900 text-white shadow-2xl border-t border-slate-700 z-30">
+    <div class="max-w-6xl mx-auto px-4 py-3.5 flex flex-wrap items-center justify-between gap-4">
+      
+      <div class="flex items-center gap-6">
+        <div>
+          <p class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">Total Ventas</p>
+          <p id="footerSales" class="text-base sm:text-lg font-bold text-emerald-400">$0</p>
+        </div>
+        <div class="text-slate-500 font-bold text-lg">-</div>
+        <div>
+          <p class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">Total Gastos</p>
+          <p id="footerExpenses" class="text-base sm:text-lg font-bold text-rose-400">$0</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-4 bg-slate-800 px-5 py-2 rounded-xl border border-slate-700">
+        <div class="text-right">
+          <p id="footerBalanceLabel" class="text-[11px] uppercase tracking-wider text-slate-300 font-semibold">Resultado Final (Ganancia - Gastos)</p>
+          <p id="footerNetBalance" class="text-xl sm:text-2xl font-extrabold text-white">$0</p>
+        </div>
+        <div id="footerStatusIcon" class="w-10 h-10 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-lg">
+          <i class="fa-solid fa-scale-balanced"></i>
+        </div>
+      </div>
+
+    </div>
+  </footer>
+
+  <script>
+    const STORAGE_KEY = 'mi_caja_diaria_registros_v1';
+    let records = [];
+    let filterMode = 'all'; // 'all' o 'date'
+    let editingId = null;
+
+    // Obtener fecha local en formato YYYY-MM-DD
+    function getTodayString() {
+      const today = new Date();
+      const offset = today.getTimezoneOffset();
+      const local = new Date(today.getTime() - (offset * 60 * 1000));
+      return local.toISOString().split('T')[0];
+    }
+
+    // Formatear moneda estilo chileno/latino ($15.000)
+    function formatCurrency(num) {
+      const n = Number(num) || 0;
+      const sign = n < 0 ? '-' : '';
+      return sign + '$' + Math.abs(Math.round(n)).toLocaleString('es-CL');
+    }
+
+    // Formatear fecha legible (Ej: Lun 13 Oct 2026)
+    function formatReadableDate(dateStr) {
+      if (!dateStr) return '';
+      const [y, m, d] = dateStr.split('-').map(Number);
+      const date = new Date(y, m - 1, d);
+      return date.toLocaleDateString('es-CL', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
+    }
+
+    // Inicializar
+    window.addEventListener('DOMContentLoaded', () => {
+      const today = getTodayString();
+      document.getElementById('entryDate').value = today;
+      document.getElementById('filterDateInput').value = today;
+
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        try { records = JSON.parse(saved); } catch (e) { records = []; }
+      }
+      updateFilterUI();
+      renderApp();
+    });
+
+    function saveToStorage() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+    }
+
+    function setQuickComment(inputId, text) {
+      const input = document.getElementById(inputId);
+      input.value = text;
+      input.focus();
+    }
+
+    function setFilterMode(mode, specificDate = null) {
+      filterMode = mode;
+      if (specificDate) {
+        document.getElementById('filterDateInput').value = specificDate;
+        document.getElementById('entryDate').value = specificDate;
+      }
+      updateFilterUI();
+      renderApp();
+    }
+
+    function updateFilterUI() {
+      const btnAll = document.getElementById('btnFilterAll');
+      const btnDate = document.getElementById('btnFilterDate');
+      const dateInput = document.getElementById('filterDateInput');
+
+      if (filterMode === 'all') {
+        btnAll.className = 'px-3 py-1.5 rounded-md text-xs font-semibold bg-white text-emerald-900 shadow-sm transition';
+        btnDate.className = 'px-3 py-1.5 rounded-md text-xs font-medium text-emerald-100 hover:text-white transition';
+        dateInput.classList.add('hidden');
+      } else {
+        btnDate.className = 'px-3 py-1.5 rounded-md text-xs font-semibold bg-white text-emerald-900 shadow-sm transition';
+        btnAll.className = 'px-3 py-1.5 rounded-md text-xs font-medium text-emerald-100 hover:text-white transition';
+        dateInput.classList.remove('hidden');
+      }
+    }
+
+    // Guardar o Actualizar registro
+    function handleSave(event, type) {
+      event.preventDefault();
+      const dateVal = document.getElementById('entryDate').value || getTodayString();
+      const amountInput = document.getElementById(type === 'sale' ? 'saleAmount' : 'expenseAmount');
+      const commentInput = document.getElementById(type === 'sale' ? 'saleComment' : 'expenseComment');
+
+      const amount = parseFloat(amountInput.value);
+      if (isNaN(amount) || amount <= 0) return;
+
+      const comment = commentInput.value.trim();
+
+      if (editingId) {
+        const index = records.findIndex(r => r.id === editingId);
+        if (index !== -1) {
+          records[index].date = dateVal;
+          records[index].type = type;
+          records[index].amount = amount;
+          records[index].comment = comment;
+        }
+        cancelEdit();
+      } else {
+        records.unshift({
+          id: Date.now().toString() + Math.random().toString(36).substring(2, 6),
+          date: dateVal,
+          type: type,
+          amount: amount,
+          comment: comment,
+          createdAt: new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })
+        });
+      }
+
+      amountInput.value = '';
+      commentInput.value = '';
+      saveToStorage();
+      renderApp();
+    }
+
+    // Editar un registro existente
+    function startEdit(id) {
+      const rec = records.find(r => r.id === id);
+      if (!rec) return;
+
+      editingId = id;
+      document.getElementById('entryDate').value = rec.date;
+
+      // Limpiar ambos formularios primero
+      document.getElementById('saleAmount').value = '';
+      document.getElementById('saleComment').value = '';
+      document.getElementById('expenseAmount').value = '';
+      document.getElementById('expenseComment').value = '';
+
+      if (rec.type === 'sale') {
+        document.getElementById('saleAmount').value = rec.amount;
+        document.getElementById('saleComment').value = rec.comment || '';
+        document.getElementById('saleSubmitBtn').innerHTML = '<i class="fa-solid fa-check"></i> Guardar Cambios en Venta';
+        document.getElementById('saleAmount').focus();
+      } else {
+        document.getElementById('expenseAmount').value = rec.amount;
+        document.getElementById('expenseComment').value = rec.comment || '';
+        document.getElementById('expenseSubmitBtn').innerHTML = '<i class="fa-solid fa-check"></i> Guardar Cambios en Gasto';
+        document.getElementById('expenseAmount').focus();
+      }
+
+      const banner = document.getElementById('editBanner');
+      banner.classList.remove('hidden');
+      document.getElementById('editBannerText').textContent = 
+        `Modificando ${rec.type === 'sale' ? 'Venta' : 'Gasto'} de ${formatCurrency(rec.amount)} (${formatReadableDate(rec.date)})`;
+      
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function cancelEdit() {
+      editingId = null;
+      document.getElementById('editBanner').classList.add('hidden');
+      document.getElementById('saleAmount').value = '';
+      document.getElementById('saleComment').value = '';
+      document.getElementById('expenseAmount').value = '';
+      document.getElementById('expenseComment').value = '';
+      document.getElementById('saleSubmitBtn').innerHTML = '<i class="fa-solid fa-plus"></i> Agregar Venta';
+      document.getElementById('expenseSubmitBtn').innerHTML = '<i class="fa-solid fa-minus"></i> Agregar Gasto';
+    }
+
+    function deleteRecord(id) {
+      if (!confirm('¿Eliminar este registro?')) return;
+      if (editingId === id) cancelEdit();
+      records = records.filter(r => r.id !== id);
+      saveToStorage();
+      renderApp();
+    }
+
+    function clearAllData() {
+      if (!records.length) return;
+      if (!confirm('¿Estás seguro de borrar TODOS los registros guardados? Esta acción no se puede deshacer.')) return;
+      records = [];
+      cancelEdit();
+      saveToStorage();
+      renderApp();
+    }
+
+    // Renderizar listas y totales
+    function renderApp() {
+      const selectedDate = document.getElementById('filterDateInput').value;
+      const filtered = filterMode === 'all' 
+        ? records 
+        : records.filter(r => r.date === selectedDate);
+
+      const sales = filtered.filter(r => r.type === 'sale');
+      const expenses = filtered.filter(r => r.type === 'expense');
+
+      const totalSales = sales.reduce((acc, r) => acc + r.amount, 0);
+      const totalExpenses = expenses.reduce((acc, r) => acc + r.amount, 0);
+      const netBalance = totalSales - totalExpenses;
+
+      // Actualizar contadores y subtotales
+      document.getElementById('salesCountBadge').textContent = `${sales.length} ${sales.length === 1 ? 'registro' : 'registros'}`;
+      document.getElementById('expensesCountBadge').textContent = `${expenses.length} ${expenses.length === 1 ? 'registro' : 'registros'}`;
+      document.getElementById('subtotalSales').textContent = formatCurrency(totalSales);
+      document.getElementById('subtotalExpenses').textContent = formatCurrency(totalExpenses);
+
+      // Renderizar Columna Ventas
+      const salesContainer = document.getElementById('salesList');
+      if (sales.length === 0) {
+        salesContainer.innerHTML = `<div class="text-center py-10 text-slate-400 text-sm">No hay ventas registradas ${filterMode === 'date' ? 'en esta fecha' : ''}.</div>`;
+      } else {
+        salesContainer.innerHTML = sales.map(item => createItemCard(item, 'emerald')).join('');
+      }
+
+      // Renderizar Columna Gastos
+      const expensesContainer = document.getElementById('expensesList');
+      if (expenses.length === 0) {
+        expensesContainer.innerHTML = `<div class="text-center py-10 text-slate-400 text-sm">No hay gastos registrados ${filterMode === 'date' ? 'en esta fecha' : ''}.</div>`;
+      } else {
+        expensesContainer.innerHTML = expenses.map(item => createItemCard(item, 'rose')).join('');
+      }
+
+      // Actualizar Barra Inferior
+      document.getElementById('footerSales').textContent = formatCurrency(totalSales);
+      document.getElementById('footerExpenses').textContent = formatCurrency(totalExpenses);
+      
+      const balanceEl = document.getElementById('footerNetBalance');
+      const iconEl = document.getElementById('footerStatusIcon');
+      const labelEl = document.getElementById('footerBalanceLabel');
+
+      labelEl.textContent = filterMode === 'all' 
+        ? 'Total Acumulado (Ganancia - Gastos)' 
+        : `Total del ${formatReadableDate(selectedDate)}`;
+
+      balanceEl.textContent = formatCurrency(netBalance);
+      if (netBalance > 0) {
+        balanceEl.className = 'text-xl sm:text-2xl font-extrabold text-emerald-400';
+        iconEl.className = 'w-10 h-10 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-lg';
+        iconEl.innerHTML = '<i class="fa-solid fa-arrow-trend-up"></i>';
+      } else if (netBalance < 0) {
+        balanceEl.className = 'text-xl sm:text-2xl font-extrabold text-rose-400';
+        iconEl.className = 'w-10 h-10 rounded-lg bg-rose-500/20 text-rose-400 flex items-center justify-center text-lg';
+        iconEl.innerHTML = '<i class="fa-solid fa-arrow-trend-down"></i>';
+      } else {
+        balanceEl.className = 'text-xl sm:text-2xl font-extrabold text-white';
+        iconEl.className = 'w-10 h-10 rounded-lg bg-slate-700 text-slate-300 flex items-center justify-center text-lg';
+        iconEl.innerHTML = '<i class="fa-solid fa-scale-balanced"></i>';
+      }
+
+      renderDailySummaryTable();
+    }
+
+    function createItemCard(item, color) {
+      const isSale = item.type === 'sale';
+      const commentHtml = item.comment 
+        ? `<p class="text-xs text-slate-600 mt-0.5 break-words"><i class="fa-regular fa-comment-dots text-slate-400 mr-1"></i>${escapeHtml(item.comment)}</p>`
+        : `<p class="text-xs text-slate-400 italic mt-0.5">Sin comentario</p>`;
+
+      return `
+        <div class="group bg-white border border-slate-200 hover:border-${color}-300 rounded-xl p-3.5 shadow-2xs transition flex justify-between items-center gap-3">
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2">
+              <span class="font-bold text-base text-${color}-700">${isSale ? '+' : '-'}${formatCurrency(item.amount)}</span>
+              <span class="text-[11px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md font-medium">${formatReadableDate(item.date)}</span>
+            </div>
+            ${commentHtml}
+          </div>
+          <div class="flex items-center gap-1">
+            <button onclick="startEdit('${item.id}')" title="Modificar" 
+              class="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition">
+              <i class="fa-solid fa-pen text-xs"></i>
+            </button>
+            <button onclick="deleteRecord('${item.id}')" title="Eliminar" 
+              class="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition">
+              <i class="fa-solid fa-trash text-xs"></i>
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderDailySummaryTable() {
+      const tbody = document.getElementById('dailySummaryBody');
+      if (!records.length) {
+        tbody.innerHTML = `<tr><td colspan="4" class="py-6 text-center text-slate-400 text-sm">Aún no hay movimientos registrados.</td></tr>`;
+        return;
+      }
+
+      // Agrupar por fecha
+      const byDate = {};
+      records.forEach(r => {
+        if (!byDate[r.date]) byDate[r.date] = { sales: 0, expenses: 0 };
+        if (r.type === 'sale') byDate[r.date].sales += r.amount;
+        else byDate[r.date].expenses += r.amount;
+      });
+
+      const sortedDates = Object.keys(byDate).sort((a, b) => b.localeCompare(a));
+
+      tbody.innerHTML = sortedDates.map(date => {
+        const dSales = byDate[date].sales;
+        const dExp = byDate[date].expenses;
+        const dNet = dSales - dExp;
+        const netColor = dNet >= 0 ? 'text-emerald-700 bg-emerald-50' : 'text-rose-700 bg-rose-50';
+
+        return `
+          <tr onclick="setFilterMode('date', '${date}')" class="hover:bg-slate-50 cursor-pointer transition">
+            <td class="py-3 px-4 font-semibold text-slate-800">${formatReadableDate(date)}</td>
+            <td class="py-3 px-4 text-right font-medium text-emerald-700">${formatCurrency(dSales)}</td>
+            <td class="py-3 px-4 text-right font-medium text-rose-700">${formatCurrency(dExp)}</td>
+            <td class="py-3 px-4 text-right">
+              <span class="font-bold px-2.5 py-1 rounded-lg ${netColor}">${formatCurrency(dNet)}</span>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // Exportar a CSV (Excel)
+    function exportCSV() {
+      if (!records.length) {
+        alert('No hay datos para exportar todavía.');
+        return;
+      }
+      let csv = '\uFEFFFecha,Tipo,Monto,Comentario\n';
+      records.forEach(r => {
+        const tipo = r.type === 'sale' ? 'Venta' : 'Gasto';
+        const monto = r.type === 'sale' ? r.amount : -r.amount;
+        const com = (r.comment || '').replace(/"/g, '""');
+        csv += `${r.date},${tipo},${monto},"${com}"\n`;
+      });
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `reporte_caja_${getTodayString()}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+    }
+  </script>
+</body>
+</html>
